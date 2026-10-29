@@ -1,0 +1,79 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Portfolio lab - EC2 CPU alarm and SNS email notification. Review costs before deployment.
+
+Parameters:
+  ImageId:
+    Type: AWS::EC2::Image::Id
+    Description: Supply a valid Linux AMI ID for the selected AWS region.
+  InstanceType:
+    Type: String
+    Default: t3.micro
+    AllowedValues:
+      - t3.micro
+      - t2.micro
+    Description: Confirm regional availability and current pricing before deployment.
+  NotificationEmail:
+    Type: String
+    Description: Email address for the SNS alarm notification.
+  CpuThreshold:
+    Type: Number
+    Default: 70
+    MinValue: 1
+    MaxValue: 100
+    Description: CPUUtilization threshold percentage.
+
+Resources:
+  AlarmTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: Portfolio EC2 CPU Alarm
+
+  EmailSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      Protocol: email
+      Endpoint: !Ref NotificationEmail
+      TopicArn: !Ref AlarmTopic
+
+  LabInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref ImageId
+      InstanceType: !Ref InstanceType
+      Tags:
+        - Key: Name
+          Value: portfolio-monitoring-lab
+        - Key: Environment
+          Value: portfolio
+
+  CpuAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Notify when EC2 CPU utilization exceeds the configured threshold.
+      Namespace: AWS/EC2
+      MetricName: CPUUtilization
+      Dimensions:
+        - Name: InstanceId
+          Value: !Ref LabInstance
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 2
+      DatapointsToAlarm: 2
+      Threshold: !Ref CpuThreshold
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref AlarmTopic
+      OKActions:
+        - !Ref AlarmTopic
+
+Outputs:
+  InstanceId:
+    Description: EC2 instance created for the lab.
+    Value: !Ref LabInstance
+  AlarmName:
+    Description: CloudWatch alarm name.
+    Value: !Ref CpuAlarm
+  NotificationTopicArn:
+    Description: SNS topic ARN.
+    Value: !Ref AlarmTopic
